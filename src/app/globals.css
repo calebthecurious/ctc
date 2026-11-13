@@ -37,3 +37,20 @@ body {
     text-decoration-color: var(--color-accent);
   }
 }
+
+/*
+ * Home page modes. The static journey is the default (no JS, reduced motion,
+ * no WebGL, weak device). An inline script sets data-run-mode on <html> before
+ * first paint; in "run" mode the 3D run replaces the static journey.
+ */
+html[data-run-mode="run"] .journey-static {
+  display: none;
+}
+
+/* Offer the 3D run only to visitors whose browser can draw it. */
+.run-anyway {
+  display: none;
+}
+html[data-run-mode="static"]:not([data-run-reason="no-webgl"]) .run-anyway {
+  display: block;
+}

@@ -32,8 +32,8 @@ export function RunExperience({ hasRunnerModel }: { hasRunnerModel: boolean }) {
       <div aria-hidden className="fixed inset-0">
         <RunCanvas hasRunnerModel={hasRunnerModel} />
       </div>
-      {/* The scroll track. Its height is the length of the run. */}
-      <div aria-hidden style={{ height: `${SCROLL_LENGTH_VH}vh` }} />
+      {/* The scroll track. Its height is the length of the run. svh keeps it stable when a phone's address bar hides. */}
+      <div aria-hidden style={{ height: `${SCROLL_LENGTH_VH}svh` }} />
     </>
   );
 }

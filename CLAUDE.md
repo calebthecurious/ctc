@@ -48,6 +48,11 @@ server-rendered library routes (Layer B).
   relative weights; positions, palette blending, the indicator, the cards and the
   greybox all derive from it (`src/run/stage-math.ts`).
 - `src/run/RunOverlay.tsx` is the HTML layer over the canvas. It must not import three.js.
+- The home page server-renders `StaticJourney` (the same stages, cards and links,
+  no WebGL). An inline script (`src/run/mode.ts`) sets `data-run-mode` on `<html>`
+  before first paint; only in `run` mode does `RunRoot` mount the canvas. Static is
+  used for reduced motion, no WebGL, weak devices and no JavaScript. `/?run` and
+  `/?static` force a mode.
 - `public/models/runner.glb` replaces the placeholder runner at build time.
 
 ## Art direction

@@ -97,9 +97,14 @@ function StageIndicator({ current }: { current: number }) {
 }
 
 /** The current stage's title and line. All are stacked; only the current one shows. */
-function StageCaption({ current }: { current: number }) {
+function StageCaption({ current, stationShown }: { current: number; stationShown: boolean }) {
   return (
-    <div className="grid w-full sm:max-w-sm">
+    <div
+      className={`${FADE} col-start-1 row-start-1 grid w-full self-end sm:max-w-sm ${
+        // On phones the station card takes the caption's place instead of stacking on it.
+        stationShown ? "max-sm:pointer-events-none max-sm:opacity-0" : ""
+      }`}
+    >
       {STAGES.map((stage) => {
         const shown = stage.index === current;
         const Heading = stage.index === 0 ? "h1" : "h2";
@@ -127,7 +132,7 @@ function StageCaption({ current }: { current: number }) {
  */
 function StationCards({ active }: { active: number }) {
   return (
-    <div className="grid w-full sm:w-80">
+    <div className="col-start-1 row-start-1 grid w-full self-end sm:col-start-2 sm:w-80 sm:justify-self-end">
       {STATIONS.map((station) => {
         const shown = station.index === active;
         return (
@@ -172,8 +177,8 @@ export function RunOverlay() {
         </div>
         <SkipTheRun />
       </header>
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <StageCaption current={stage} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <StageCaption current={stage} stationShown={station !== -1} />
         <StationCards active={station} />
       </div>
     </div>

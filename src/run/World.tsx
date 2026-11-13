@@ -3,12 +3,14 @@
 import { useFrame } from "@react-three/fiber";
 import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import {
+  BoxGeometry,
   Euler,
   Matrix4,
+  MeshBasicMaterial,
+  MeshLambertMaterial,
   Quaternion,
   Vector3,
   type InstancedMesh,
-  type MeshLambertMaterial,
 } from "three";
 import { currentPalette, setRgb } from "./Atmosphere";
 import { COLORS, DRUM_RADIUS, DRUM_WIDTH } from "./config";
@@ -54,22 +56,19 @@ function OnDrum({ at, x = 0, children }: { at: number; x?: number; children: Rea
   );
 }
 
-function Accent({ position, size }: { position: [number, number, number]; size: [number, number, number] }) {
-  return (
-    <mesh position={position}>
-      <boxGeometry args={size} />
-      <meshBasicMaterial color={COLORS.accent} />
-    </mesh>
-  );
+// Shared by every set piece, so the scene needs only a handful of materials and one box.
+const UNIT_BOX = new BoxGeometry(1, 1, 1);
+const ACCENT_MATERIAL = new MeshBasicMaterial({ color: COLORS.accent });
+const WOOD_MATERIAL = new MeshLambertMaterial({ color: "#8a5a3a" });
+
+type Block = { position: [number, number, number]; size: [number, number, number] };
+
+function Accent({ position, size }: Block) {
+  return <mesh position={position} scale={size} geometry={UNIT_BOX} material={ACCENT_MATERIAL} />;
 }
 
-function Wood({ position, size }: { position: [number, number, number]; size: [number, number, number] }) {
-  return (
-    <mesh position={position}>
-      <boxGeometry args={size} />
-      <meshLambertMaterial color="#8a5a3a" />
-    </mesh>
-  );
+function Wood({ position, size }: Block) {
+  return <mesh position={position} scale={size} geometry={UNIT_BOX} material={WOOD_MATERIAL} />;
 }
 
 /** PLACEHOLDER set pieces, one per `landmark` value a stage can name. */

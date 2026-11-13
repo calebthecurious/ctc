@@ -1,7 +1,7 @@
 "use client";
 
 import { useFrame, useThree } from "@react-three/fiber";
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { MathUtils, type Group, type PerspectiveCamera } from "three";
 import { currentPalette } from "./Atmosphere";
 import { DRUM_RADIUS, PROGRESS_DAMPING, TRAIL_ARC } from "./config";
@@ -38,9 +38,51 @@ export function CameraRig() {
 
   useFrame(() => {
     const lift = MathUtils.smootherstep(currentPalette().cameraLift, 0, 1);
-    const pullBack = (size.width < size.height ? 1.45 : 1) * (1 + lift * 0.5);
+    const portrait = size.width < size.height;
+    const pullBack = (portrait ? 1.45 : 1) * (1 + lift * 0.5);
     camera.position.set(15 * pullBack, DRUM_RADIUS + 1.2 + 3.4 * pullBack + lift * 7, 6.5 * pullBack);
-    camera.lookAt(0, DRUM_RADIUS + 1.1 + lift * 1.5, -2.2 - lift * 7);
+    // In portrait the lower part of the screen holds the cards, so aim lower and
+    // further back along the trail: that puts the runner in the clear upper half.
+    camera.lookAt(0, DRUM_RADIUS + (portrait ? -1.6 : 1.1) + lift * 1.5, (portrait ? -0.4 : -2.2) - lift * 7);
+  });
+
+  return null;
+}
+
+/** Compiles every shader up front, so nothing stalls a frame when it first scrolls into view. */
+export function Precompile() {
+  const gl = useThree((three) => three.gl);
+  const scene = useThree((three) => three.scene);
+  const camera = useThree((three) => three.camera);
+  useEffect(() => {
+    gl.compile(scene, camera);
+  }, [gl, scene, camera]);
+  return null;
+}
+
+const SAMPLE_FRAMES = 60;
+
+/**
+ * Lowers the pixel ratio a step at a time when frames run slow, and never
+ * raises it again: a steady lower resolution beats one that flickers.
+ */
+export function AdaptiveResolution({ max }: { max: number }) {
+  const setDpr = useThree((three) => three.setDpr);
+  const sample = useRef({ frames: 0, time: 0, dpr: max });
+
+  useFrame((_, delta) => {
+    const current = sample.current;
+    current.frames += 1;
+    current.time += delta;
+    if (current.frames < SAMPLE_FRAMES) return;
+    const average = current.time / current.frames;
+    current.frames = 0;
+    current.time = 0;
+    // Slower than about 40 fps over the sample: step down, to a floor of 1.
+    if (average > 1 / 40 && current.dpr > 1) {
+      current.dpr = Math.max(1, current.dpr - 0.25);
+      setDpr(current.dpr);
+    }
   });
 
   return null;

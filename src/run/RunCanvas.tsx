@@ -3,7 +3,7 @@
 import { Canvas } from "@react-three/fiber";
 import { useEffect, useState } from "react";
 import { Atmosphere } from "./Atmosphere";
-import { CameraRig, Rig } from "./Rig";
+import { AdaptiveResolution, CameraRig, Precompile, Rig } from "./Rig";
 import { Runner } from "./runner/Runner";
 import { World } from "./World";
 
@@ -22,11 +22,16 @@ function usePageVisible(): boolean {
 /** The WebGL scene. This module and everything it imports is one lazy chunk. */
 export default function RunCanvas({ hasRunnerModel }: { hasRunnerModel: boolean }) {
   const visible = usePageVisible();
+  // Cap the pixel ratio: phones have dense screens and small GPUs.
+  const [maxDpr] = useState(() => {
+    const cap = window.matchMedia("(pointer: coarse)").matches ? 1.5 : 1.75;
+    return Math.min(window.devicePixelRatio || 1, cap);
+  });
 
   return (
     <Canvas
       frameloop={visible ? "always" : "never"}
-      dpr={[1, 1.75]}
+      dpr={maxDpr}
       camera={{ fov: 30, near: 0.5, far: 140 }}
       gl={{ antialias: true, powerPreference: "high-performance" }}
     >
@@ -36,6 +41,8 @@ export default function RunCanvas({ hasRunnerModel }: { hasRunnerModel: boolean 
         <World />
       </Rig>
       <Runner hasModel={hasRunnerModel} />
+      <Precompile />
+      <AdaptiveResolution max={maxDpr} />
     </Canvas>
   );
 }

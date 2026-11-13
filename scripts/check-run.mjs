@@ -34,8 +34,9 @@ async function webglScripts(route) {
   await page.close();
   return { found, html };
 }
-const home = await webglScripts("/");
-check(home.found.length > 0, `/ loads three.js lazily (${home.found.map((f) => `${(f.bytes / 1024).toFixed(0)} kB`).join(", ")})`);
+// ?run forces the 3D run: headless Chromium renders in software, which the site treats as a weak device.
+const home = await webglScripts("/?run");
+check(home.found.length > 0, `/?run loads three.js lazily (${home.found.map((f) => `${(f.bytes / 1024).toFixed(0)} kB`).join(", ")})`);
 check(
   home.found.every((file) => !home.html.includes(file.url)),
   "three.js chunk is not referenced by the home page HTML (fetched after hydration)",
@@ -50,7 +51,7 @@ console.log("Scrolling");
 const page = await context.newPage();
 const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
-await page.goto(base + "/");
+await page.goto(base + "/?run");
 await page.waitForSelector("canvas");
 await page.waitForFunction(() => window.__run?.getState().frames > 5);
 
@@ -146,7 +147,7 @@ const goTo = async (at) => {
   await settle();
   await page.waitForTimeout(650); // card fade
 };
-const homeUrl = base + "/";
+const homeUrl = base + "/?run";
 const stations = await page.$$eval("[data-station]", (cards) =>
   cards.map((card) => ({ href: card.dataset.station, at: Number(card.dataset.at) })),
 );
@@ -217,7 +218,142 @@ await page.keyboard.press("Enter");
 await page.waitForURL(base + indexLinks[0]);
 check(true, `keyboard: index link opens ${indexLinks[0]}`);
 
+// --- 5. Fallbacks ------------------------------------------------------------
+console.log("Fallbacks");
+const ROUTES = ["/work", "/stories", "/thoughts", "/library", "/people", "/seasons", "/about"];
+async function fallback(label, expectedReason, contextOptions, initScript) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...contextOptions });
+  const tab = await ctx.newPage();
+  if (initScript) await tab.addInitScript(initScript);
+  let three = 0;
+  tab.on("response", async (response) => {
+    if (!response.url().includes(".js")) return;
+    try {
+      if ((await response.text()).includes("WebGLRenderer")) three += 1;
+    } catch {}
+  });
+  await tab.goto(base + "/", { waitUntil: "networkidle" });
+  const result = await tab.evaluate((routes) => {
+    const visible = (element) => element.checkVisibility() && element.getClientRects().length > 0;
+    const journey = document.querySelector(".journey-static");
+    const links = [...journey.querySelectorAll("a")].filter(visible).map((link) => link.getAttribute("href"));
+    return {
+      mode: document.documentElement.dataset.runMode ?? "(not set)",
+      reason: document.documentElement.dataset.runReason ?? "(not set)",
+      canvases: document.querySelectorAll("canvas").length,
+      stages: [...journey.querySelectorAll("section h2")].filter(visible).length,
+      cards: routes.filter((route) => links.filter((href) => href === route).length >= 2).length,
+      offer: visible(journey.querySelector(".run-anyway")),
+    };
+  }, ROUTES);
+  check(
+    result.reason === expectedReason && result.canvases === 0 && three === 0 && result.stages === 6 && result.cards === 7,
+    `${label}: ${result.mode}/${result.reason}, ${result.stages} stages, all ${result.cards}/7 routes linked from a card and the index, no canvas, no three.js`,
+  );
+  return { tab, ctx, result };
+}
+
+const reduced = await fallback("reduced motion", "reduced-motion", { reducedMotion: "reduce" });
+check(reduced.result.offer, "reduced motion: the 3D run is offered as a choice");
+await reduced.tab.getByRole("button", { name: "Start the 3D run" }).click();
+await reduced.tab.waitForSelector("canvas");
+check(true, "reduced motion: choosing it starts the run");
+await reduced.ctx.close();
+
+const noWebgl = await fallback("no WebGL", "no-webgl", {}, () => {
+  HTMLCanvasElement.prototype.getContext = () => null;
+});
+check(!noWebgl.result.offer, "no WebGL: the 3D run is not offered");
+await noWebgl.ctx.close();
+
+// Headless Chromium does not report its software renderer as a performance caveat, so
+// that branch cannot be exercised here; low device memory takes the same path.
+const weak = await fallback("weak device (2 GB of memory or less)", "weak-device", {}, () => {
+  Object.defineProperty(navigator, "deviceMemory", { get: () => 1 });
+});
+await weak.ctx.close();
+
+const noJs = await fallback("JavaScript off", "(not set)", { javaScriptEnabled: false });
+await noJs.ctx.close();
+
+// Phone: touch scrolling drives the run, and the pixel ratio is capped.
+{
+  const { devices } = require("playwright");
+  const phone = await browser.newContext({ ...devices["iPhone 13"] });
+  const tab = await phone.newPage();
+  await tab.goto(base + "/?run");
+  await tab.waitForSelector("canvas");
+  await tab.waitForFunction(() => window.__run?.getState().frames > 5);
+  const touch = await phone.newCDPSession(tab);
+  await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 195, y: 600 }] });
+  for (let y = 580; y >= 200; y -= 20) {
+    await touch.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 195, y }] });
+    await tab.waitForTimeout(16);
+  }
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await tab.waitForTimeout(800);
+  const moved = await tab.evaluate(() => window.__run.getState().progress);
+  check(moved > 0, `phone: a touch swipe moves the run (progress ${moved.toFixed(3)})`);
+  const ratio = await tab.evaluate(() => {
+    const canvas = document.querySelector("canvas");
+    return { used: canvas.width / canvas.clientWidth, device: devicePixelRatio };
+  });
+  check(ratio.used <= 1.5, `phone: canvas pixel ratio capped at ${ratio.used.toFixed(2)} (device reports ${ratio.device})`);
+  check(await tab.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "phone: no horizontal scrolling");
+  await phone.close();
+}
+
+// --- 6. Measurements ---------------------------------------------------------
+console.log("Measurements");
+const { gzipSync } = require("node:zlib");
+async function jsWeight(route) {
+  const tab = await context.newPage();
+  const files = [];
+  tab.on("response", async (response) => {
+    if (!response.url().includes(".js")) return;
+    try {
+      const body = await response.body();
+      files.push({ raw: body.length, gzip: gzipSync(body).length, three: body.includes("WebGLRenderer") });
+    } catch {}
+  });
+  await tab.goto(base + route, { waitUntil: "networkidle" });
+  await tab.waitForTimeout(1500);
+  const sum = (list, key) => list.reduce((total, file) => total + file[key], 0);
+  const kb = (bytes) => `${(bytes / 1024).toFixed(0)} kB`;
+  const canvas = files.filter((file) => file.three);
+  console.log(
+    `  ${route.padEnd(9)} ${files.length} JS files, ${kb(sum(files, "gzip"))} gzip (${kb(sum(files, "raw"))} raw); of which canvas chunks: ${kb(sum(canvas, "gzip"))} gzip (${kb(sum(canvas, "raw"))} raw)`,
+  );
+  return tab;
+}
+await (await jsWeight("/?static")).close();
+const idleTab = await jsWeight("/?run");
+await idleTab.waitForTimeout(5000);
+const cdp = await context.newCDPSession(idleTab);
+await cdp.send("Performance.enable");
+await cdp.send("HeapProfiler.collectGarbage");
+const { metrics } = await cdp.send("Performance.getMetrics");
+const heap = metrics.find((metric) => metric.name === "JSHeapUsedSize").value;
+console.log(`  idle on the run after 5 s: JS heap ${(heap / 1048576).toFixed(1)} MB`);
+check(heap < 300 * 1048576, "idle JS heap is under 300 MB");
+await idleTab.close();
+
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join("; ")}` : ""}`);
 await browser.close();
+
+// Process memory, measured in a fresh browser with only the run open.
+const solo = await chromium.launch({ args: ["--enable-unsafe-swiftshader", "--use-angle=swiftshader"] });
+const soloPage = await solo.newPage({ viewport: { width: 1280, height: 800 } });
+await soloPage.goto(base + "/?run");
+await soloPage.waitForSelector("canvas");
+await soloPage.waitForTimeout(6000);
+const { execSync } = require("node:child_process");
+const processes = execSync("ps -eo rss,args | grep -E 'chrom|headless_shell' | grep -v grep").toString().trim().split("\n");
+const mb = (pattern) =>
+  Math.round(processes.filter((line) => line.includes(pattern)).reduce((sum, line) => sum + Number(line.trim().split(/\s+/)[0]), 0) / 1024);
+console.log(`  idle process memory: page (renderer) ${mb("--type=renderer")} MB, graphics process ${mb("--type=gpu-process")} MB (software GL here)`);
+check(mb("--type=renderer") < 300, "idle page process is under 300 MB");
+await solo.close();
+
 if (failed) process.exit(1);
 console.log("\nScroll rig passes.");
