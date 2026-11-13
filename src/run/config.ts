@@ -8,7 +8,7 @@ export const DRUM_RADIUS = 30;
 /** Width of the drum, across the trail. */
 export const DRUM_WIDTH = 16;
 /** How far round the drum the trail runs from progress 0 to 1, in radians. */
-export const TRAIL_ARC = Math.PI * 1.8;
+export const TRAIL_ARC = Math.PI * 1.4;
 
 /** How quickly the smoothed progress chases the scroll position. Higher is snappier. */
 export const PROGRESS_DAMPING = 5;
@@ -21,8 +21,6 @@ export const RUNNER_MODEL_PATH = "/models/runner.glb";
 export const COLORS = {
   base: "#0a0a0f",
   accent: "#00d9c0",
-  // PLACEHOLDER: greybox colours. Stage palettes replace these in Step 4.
-  ground: "#2a2a35",
-  prop: "#4a4a5a",
+  // PLACEHOLDER: colour of the placeholder runner.
   runner: "#c8c8d4",
 } as const;

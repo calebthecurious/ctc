@@ -1,8 +1,9 @@
 "use client";
 
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { MathUtils, type Group, type PerspectiveCamera } from "three";
+import { currentPalette } from "./Atmosphere";
 import { DRUM_RADIUS, PROGRESS_DAMPING, TRAIL_ARC } from "./config";
 import { useRunStore } from "./store";
 
@@ -27,17 +28,20 @@ export function Rig({ children }: { children: ReactNode }) {
   return <group ref={drum}>{children}</group>;
 }
 
-/** Fixed camera looking at the runner. Pulls back on narrow screens to keep him in frame. */
+/**
+ * Camera looking at the runner. Pulls back on narrow screens to keep him in
+ * frame, and lifts up and out as the stage palette's `cameraLift` rises.
+ */
 export function CameraRig() {
   const camera = useThree((three) => three.camera as PerspectiveCamera);
-  const aspect = useThree((three) => three.size.width / three.size.height);
+  const size = useThree((three) => three.size);
 
-  useEffect(() => {
-    const pullBack = aspect < 1 ? 1.45 : 1;
-    camera.position.set(15 * pullBack, DRUM_RADIUS + 1.2 + 3.4 * pullBack, 6.5 * pullBack);
-    camera.lookAt(0, DRUM_RADIUS + 1.1, -2.2);
-    camera.updateProjectionMatrix();
-  }, [camera, aspect]);
+  useFrame(() => {
+    const lift = MathUtils.smootherstep(currentPalette().cameraLift, 0, 1);
+    const pullBack = (size.width < size.height ? 1.45 : 1) * (1 + lift * 0.5);
+    camera.position.set(15 * pullBack, DRUM_RADIUS + 1.2 + 3.4 * pullBack + lift * 7, 6.5 * pullBack);
+    camera.lookAt(0, DRUM_RADIUS + 1.1 + lift * 1.5, -2.2 - lift * 7);
+  });
 
   return null;
 }

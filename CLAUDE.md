@@ -44,6 +44,10 @@ server-rendered library routes (Layer B).
   `getState()` inside `useFrame`, never through a React subscription.
 - The world sits on a drum that turns about X. Place things with `onDrum(at)`
   from `src/run/placement.ts`, where `at` is the progress at which they reach the runner.
+- Stages and aid stations are data: edit `src/run/stages.ts` only. Lengths are
+  relative weights; positions, palette blending, the indicator, the cards and the
+  greybox all derive from it (`src/run/stage-math.ts`).
+- `src/run/RunOverlay.tsx` is the HTML layer over the canvas. It must not import three.js.
 - `public/models/runner.glb` replaces the placeholder runner at build time.
 
 ## Art direction

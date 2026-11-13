@@ -2,7 +2,7 @@
 
 import { Canvas } from "@react-three/fiber";
 import { useEffect, useState } from "react";
-import { COLORS } from "./config";
+import { Atmosphere } from "./Atmosphere";
 import { CameraRig, Rig } from "./Rig";
 import { Runner } from "./runner/Runner";
 import { World } from "./World";
@@ -30,11 +30,7 @@ export default function RunCanvas({ hasRunnerModel }: { hasRunnerModel: boolean 
       camera={{ fov: 30, near: 0.5, far: 140 }}
       gl={{ antialias: true, powerPreference: "high-performance" }}
     >
-      <color attach="background" args={[COLORS.base]} />
-      <fog attach="fog" args={[COLORS.base, 20, 52]} />
-      {/* PLACEHOLDER: flat greybox lighting. Stages set light and fog in Step 4. */}
-      <ambientLight intensity={0.9} />
-      <directionalLight position={[6, 12, 4]} intensity={1.4} />
+      <Atmosphere />
       <CameraRig />
       <Rig>
         <World />

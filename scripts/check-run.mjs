@@ -135,6 +135,88 @@ await setHidden(false);
 await page.waitForTimeout(200);
 check((await framesIn(1000)) > 5, "frames resume when visible again");
 
+// --- 4. Stages, aid stations and the skip control ---------------------------
+console.log("Stages and aid stations");
+const goTo = async (at) => {
+  await page.evaluate((value) => {
+    const max = document.documentElement.scrollHeight - innerHeight;
+    window.scrollTo(0, Math.round(max * value));
+  }, at);
+  await page.waitForFunction((value) => Math.abs(window.__run.getState().target - value) < 0.001, at);
+  await settle();
+  await page.waitForTimeout(650); // card fade
+};
+const homeUrl = base + "/";
+const stations = await page.$$eval("[data-station]", (cards) =>
+  cards.map((card) => ({ href: card.dataset.station, at: Number(card.dataset.at) })),
+);
+check(stations.length === 7, `7 aid stations in the page (${stations.map((s) => s.href).join(" ")})`);
+
+const stageLabels = await page.$$eval('nav[aria-label="Stages of the run"] button', (buttons) =>
+  buttons.map((button) => button.textContent),
+);
+check(stageLabels.length > 1, `stage indicator lists ${stageLabels.join(", ")}`);
+await goTo(0);
+const firstStage = await page.textContent('button[aria-current="step"]');
+await goTo(1);
+const lastStage = await page.textContent('button[aria-current="step"]');
+check(firstStage === stageLabels[0] && lastStage === stageLabels.at(-1), `indicator follows the run (${firstStage} at 0, ${lastStage} at 1)`);
+
+// Mouse: run to each station, click its card, land on the route.
+let mouseOk = 0;
+for (const station of stations) {
+  await page.goto(homeUrl);
+  await page.waitForFunction(() => window.__run?.getState().frames > 5);
+  await goTo(station.at);
+  const card = page.locator(`[data-station="${station.href}"]`);
+  const opacity = await card.evaluate((element) => getComputedStyle(element).opacity);
+  await card.click({ timeout: 5000 });
+  await page.waitForURL(base + station.href);
+  const heading = await page.textContent("h1");
+  if (opacity === "1" && heading) mouseOk += 1;
+  else console.log(`    ${station.href}: opacity ${opacity}, heading ${heading}`);
+}
+check(mouseOk === stations.length, `mouse: ${mouseOk}/${stations.length} cards appear at their station and open their route`);
+
+// Keyboard: Tab from the top reaches every card link; focus runs there; Enter opens it.
+await page.goto(homeUrl);
+await page.waitForFunction(() => window.__run?.getState().frames > 5);
+const reached = [];
+for (let presses = 0; presses < 30 && reached.length < stations.length; presses += 1) {
+  await page.keyboard.press("Tab");
+  const href = await page.evaluate(() => document.activeElement?.closest("[data-station]")?.dataset.station ?? null);
+  if (!href || reached.some((entry) => entry.href === href)) continue;
+  const station = stations.find((entry) => entry.href === href);
+  await page.waitForFunction((value) => Math.abs(window.__run.getState().target - value) < 0.001, station.at);
+  await settle();
+  await page.waitForTimeout(650);
+  const progress = (await state()).progress;
+  const opacity = await page.locator(`[data-station="${href}"]`).evaluate((element) => getComputedStyle(element).opacity);
+  reached.push({ href, arrived: Math.abs(progress - station.at) < 0.001, visible: opacity === "1" });
+}
+check(
+  reached.length === stations.length && reached.every((entry) => entry.arrived && entry.visible),
+  `keyboard: Tab reaches ${reached.length}/${stations.length} cards, each runs to its station and shows`,
+);
+await page.keyboard.press("Enter");
+await page.waitForURL(base + reached.at(-1).href);
+check(true, `keyboard: Enter on the focused card opens ${reached.at(-1).href}`);
+
+// Skip the run: keyboard only.
+await page.goto(homeUrl);
+await page.waitForFunction(() => window.__run?.getState().frames > 5);
+await page.getByRole("button", { name: "Skip the run" }).focus();
+await page.keyboard.press("Enter");
+const indexLinks = await page.$$eval("dialog[open] a", (links) => links.map((link) => link.getAttribute("href")));
+check(indexLinks.length === 7, `Skip the run opens an index of ${indexLinks.length} routes (${indexLinks.join(" ")})`);
+await page.keyboard.press("Escape");
+check((await page.$("dialog[open]")) === null, "Escape closes the index");
+await page.keyboard.press("Enter");
+await page.keyboard.press("Tab");
+await page.keyboard.press("Enter");
+await page.waitForURL(base + indexLinks[0]);
+check(true, `keyboard: index link opens ${indexLinks[0]}`);
+
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join("; ")}` : ""}`);
 await browser.close();
 if (failed) process.exit(1);

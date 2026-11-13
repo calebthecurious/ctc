@@ -1,14 +1,24 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef } from "react";
-import { Euler, Matrix4, Quaternion, Vector3, type InstancedMesh } from "three";
-import { COLORS, DRUM_RADIUS, DRUM_WIDTH, TRAIL_ARC } from "./config";
+import { useFrame } from "@react-three/fiber";
+import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
+import {
+  Euler,
+  Matrix4,
+  Quaternion,
+  Vector3,
+  type InstancedMesh,
+  type MeshLambertMaterial,
+} from "three";
+import { currentPalette, setRgb } from "./Atmosphere";
+import { COLORS, DRUM_RADIUS, DRUM_WIDTH } from "./config";
 import { onDrum, seededRandom } from "./placement";
+import { STAGES, STATIONS, type Stage } from "./stage-math";
 
-// PLACEHOLDER: greybox world. Stage environments (GLB) replace this later.
+// PLACEHOLDER: greybox world built from each stage's `greybox` recipe.
+// Stage environments (GLB) replace this later.
 
-const PROP_COUNT = 140;
-const POST_COUNT = 40;
+const POST_SPACING = 0.022; // progress between distance posts
 
 interface Placed {
   position: [number, number, number];
@@ -34,42 +44,140 @@ function useInstances(items: Placed[]) {
   return ref;
 }
 
-export function World() {
-  const { boxes, cones, posts } = useMemo(() => {
-    const random = seededRandom(7);
-    const boxes: Placed[] = [];
-    const cones: Placed[] = [];
-    // Scatter props over the whole drum, either side of the trail.
-    const full = (Math.PI * 2) / TRAIL_ARC;
-    for (let index = 0; index < PROP_COUNT; index += 1) {
-      const at = random() * full;
+/** Something placed on the drum at a progress value, standing upright. */
+function OnDrum({ at, x = 0, children }: { at: number; x?: number; children: ReactNode }) {
+  const { position, rotation } = onDrum(at, x);
+  return (
+    <group position={position} rotation={rotation}>
+      {children}
+    </group>
+  );
+}
+
+function Accent({ position, size }: { position: [number, number, number]; size: [number, number, number] }) {
+  return (
+    <mesh position={position}>
+      <boxGeometry args={size} />
+      <meshBasicMaterial color={COLORS.accent} />
+    </mesh>
+  );
+}
+
+function Wood({ position, size }: { position: [number, number, number]; size: [number, number, number] }) {
+  return (
+    <mesh position={position}>
+      <boxGeometry args={size} />
+      <meshLambertMaterial color="#8a5a3a" />
+    </mesh>
+  );
+}
+
+/** PLACEHOLDER set pieces, one per `landmark` value a stage can name. */
+const LANDMARKS: Record<NonNullable<Stage["landmark"]>, (stage: Stage) => ReactNode> = {
+  // An arch over the trail at the start of the stage.
+  gate: (stage) => (
+    <OnDrum at={stage.start + 0.004}>
+      <Accent position={[-1.1, 1.3, 0]} size={[0.1, 2.6, 0.1]} />
+      <Accent position={[1.1, 1.3, 0]} size={[0.1, 2.6, 0.1]} />
+      <Accent position={[0, 2.6, 0]} size={[2.3, 0.1, 0.1]} />
+    </OnDrum>
+  ),
+  // Planks along the stage, and a boat waiting at its end.
+  jetty: (stage) => {
+    const planks = 26;
+    return (
+      <>
+        {Array.from({ length: planks }, (_, index) => (
+          <OnDrum key={index} at={stage.start + ((index + 0.5) / planks) * (stage.end - stage.start) * 0.94}>
+            <Wood position={[0, 0.06, 0]} size={[1.8, 0.12, 0.62]} />
+          </OnDrum>
+        ))}
+        <OnDrum at={stage.end}>
+          <Wood position={[0, 0.02, -0.4]} size={[1.5, 0.3, 4.2]} />
+          <Wood position={[0.8, 0.35, -0.4]} size={[0.12, 0.5, 4.2]} />
+          <Wood position={[-0.8, 0.35, -0.4]} size={[0.12, 0.5, 4.2]} />
+          <Wood position={[0, 2.4, -1.6]} size={[0.1, 4.4, 0.1]} />
+          <mesh position={[0, 2.9, -0.75]}>
+            <boxGeometry args={[0.04, 3, 1.6]} />
+            <meshLambertMaterial color="#f4ead8" />
+          </mesh>
+        </OnDrum>
+      </>
+    );
+  },
+};
+
+/** PLACEHOLDER aid station: a small tent and flag beside the trail. */
+function AidStation({ at }: { at: number }) {
+  return (
+    <OnDrum at={at} x={-1.9}>
+      <mesh position={[0, 0.55, 0]}>
+        <boxGeometry args={[1.5, 1.1, 1.5]} />
+        <meshLambertMaterial color="#e8e8ee" />
+      </mesh>
+      <mesh position={[0, 1.45, 0]} rotation={[0, Math.PI / 4, 0]}>
+        <coneGeometry args={[1.25, 0.7, 4]} />
+        <meshBasicMaterial color={COLORS.accent} />
+      </mesh>
+      <Accent position={[1.05, 1.4, 0]} size={[0.06, 2.8, 0.06]} />
+      <Accent position={[1.05, 2.55, -0.3]} size={[0.04, 0.4, 0.6]} />
+    </OnDrum>
+  );
+}
+
+function scatter(): { boxes: Placed[]; cones: Placed[]; posts: Placed[] } {
+  const random = seededRandom(7);
+  const between = ([min, max]: [number, number]) => min + random() * (max - min);
+  const boxes: Placed[] = [];
+  const cones: Placed[] = [];
+
+  for (const stage of STAGES) {
+    const span = stage.end - stage.start;
+    const count = Math.round(stage.greybox.density * span);
+    for (let index = 0; index < count; index += 1) {
+      const at = stage.start + random() * span;
       // The camera sits on the +X side, so that side only gets low props:
       // nothing may stand between the camera and the runner.
       const near = random() < 0.3;
-      const x = near ? 1.8 + random() * 2.6 : -(2 + random() * (DRUM_WIDTH / 2 - 2.8));
-      const width = near ? 0.3 + random() * 0.5 : 0.6 + random() * 1.6;
-      const height = near ? 0.15 + random() * 0.35 : 0.6 + random() * 3.2;
+      const x = near ? 1.8 + random() * 2.6 : -(3.2 + random() * (DRUM_WIDTH / 2 - 4));
+      const width = between(stage.greybox.width) * (near ? 0.35 : 1);
+      const height = near ? 0.15 + random() * 0.35 : between(stage.greybox.height);
       const placed = { ...onDrum(at, x, height / 2), scale: [width, height, width] as Placed["scale"] };
-      (random() < 0.6 ? boxes : cones).push(placed);
+      (random() < stage.greybox.coneShare ? cones : boxes).push(placed);
     }
-    // Evenly spaced posts beside the trail make the distance readable.
-    const posts: Placed[] = Array.from({ length: POST_COUNT }, (_, index) => ({
-      ...onDrum(index / POST_COUNT * full, 0.9, 0.25),
-      scale: [0.08, 0.5, 0.08],
-    }));
-    return { boxes, cones, posts };
-  }, []);
+  }
 
+  // Evenly spaced posts beside the trail make the distance readable.
+  const posts: Placed[] = [];
+  for (let at = POST_SPACING; at < STAGES[STAGES.length - 1].start; at += POST_SPACING) {
+    posts.push({ ...onDrum(at, 0.9, 0.25), scale: [0.08, 0.5, 0.08] });
+  }
+  return { boxes, cones, posts };
+}
+
+export function World() {
+  const { boxes, cones, posts } = useMemo(() => scatter(), []);
   const boxRef = useInstances(boxes);
   const coneRef = useInstances(cones);
   const postRef = useInstances(posts);
+  const ground = useRef<MeshLambertMaterial>(null);
+  const boxMaterial = useRef<MeshLambertMaterial>(null);
+  const coneMaterial = useRef<MeshLambertMaterial>(null);
+
+  // Only the scenery near the runner is visible, so one tint for all of it is enough.
+  useFrame(() => {
+    const palette = currentPalette();
+    if (ground.current) setRgb(ground.current.color, palette.ground);
+    if (boxMaterial.current) setRgb(boxMaterial.current.color, palette.prop);
+    if (coneMaterial.current) setRgb(coneMaterial.current.color, palette.prop);
+  });
 
   return (
     <>
       {/* The drum. Its axis is X, so the cylinder is laid on its side. */}
       <mesh rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[DRUM_RADIUS, DRUM_RADIUS, DRUM_WIDTH, 128, 1]} />
-        <meshLambertMaterial color={COLORS.ground} />
+        <meshLambertMaterial ref={ground} />
       </mesh>
       {/* The trail line. */}
       <mesh rotation={[0, 0, Math.PI / 2]}>
@@ -78,16 +186,22 @@ export function World() {
       </mesh>
       <instancedMesh ref={boxRef} args={[undefined, undefined, boxes.length]}>
         <boxGeometry />
-        <meshLambertMaterial color={COLORS.prop} />
+        <meshLambertMaterial ref={boxMaterial} />
       </instancedMesh>
       <instancedMesh ref={coneRef} args={[undefined, undefined, cones.length]}>
         <coneGeometry args={[0.5, 1, 6]} />
-        <meshLambertMaterial color={COLORS.prop} flatShading />
+        <meshLambertMaterial ref={coneMaterial} flatShading />
       </instancedMesh>
       <instancedMesh ref={postRef} args={[undefined, undefined, posts.length]}>
         <boxGeometry />
         <meshBasicMaterial color={COLORS.accent} />
       </instancedMesh>
+      {STAGES.map((stage) =>
+        stage.landmark ? <group key={stage.key}>{LANDMARKS[stage.landmark](stage)}</group> : null,
+      )}
+      {STATIONS.map((station) => (
+        <AidStation key={station.href} at={station.at} />
+      ))}
     </>
   );
 }
