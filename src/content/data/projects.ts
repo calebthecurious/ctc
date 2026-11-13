@@ -1,0 +1,47 @@
+import type { Project } from "../types";
+
+// PLACEHOLDER: every project below is seed content. Replace with real case studies.
+export const projects: Project[] = [
+  {
+    id: "project/placeholder-run-club-platform",
+    type: "project",
+    title: "PLACEHOLDER: Run club platform",
+    summary: "PLACEHOLDER: a tool that helps a run club organise its week.",
+    links: ["story/placeholder-first-ultra", "thought/placeholder-why-community"],
+    public: true,
+    decade: "connect",
+    placeholder: true,
+    role: "PLACEHOLDER: solo full-stack developer",
+    stack: ["Next.js", "TypeScript", "Supabase"],
+    outcome: "PLACEHOLDER: what changed for the people who used it.",
+    year: 2025,
+  },
+  {
+    id: "project/placeholder-event-app",
+    type: "project",
+    title: "PLACEHOLDER: Community events app",
+    summary: "PLACEHOLDER: an app that makes it easier to show up to things.",
+    links: ["thought/placeholder-why-community"],
+    public: true,
+    decade: "connect",
+    placeholder: true,
+    role: "PLACEHOLDER: lead developer",
+    stack: ["React Native", "Node.js"],
+    outcome: "PLACEHOLDER: the measurable outcome.",
+    year: 2024,
+  },
+  {
+    id: "project/placeholder-health-prototype",
+    type: "project",
+    title: "PLACEHOLDER: Health-tech prototype",
+    summary: "PLACEHOLDER: a first experiment on the way to health-tech.",
+    links: ["resource/placeholder-dementia-paper", "thought/placeholder-decades"],
+    public: true,
+    decade: "preserve",
+    placeholder: true,
+    role: "PLACEHOLDER: designer and developer",
+    stack: ["TypeScript", "Python"],
+    outcome: "PLACEHOLDER: what I learned.",
+    year: 2026,
+  },
+];
