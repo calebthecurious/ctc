@@ -32,6 +32,19 @@ server-rendered library routes (Layer B).
 - `npm run typecheck`
 - `npm run check:content`
 - `npm test`
+- `npm run check:routes` (needs `npm run start` running)
+- `npm run check:run` (needs `npm run start` running and Playwright installed)
+
+## The run
+
+- All 3D lives in `src/run/`. `RunCanvas.tsx` is the lazy chunk; nothing outside
+  `src/run/` may import three.js.
+- One store (`src/run/store.ts`): scroll writes `target`, the rig smooths it into
+  `progress`, everything else reads `progress` and `velocity`. Read it with
+  `getState()` inside `useFrame`, never through a React subscription.
+- The world sits on a drum that turns about X. Place things with `onDrum(at)`
+  from `src/run/placement.ts`, where `at` is the progress at which they reach the runner.
+- `public/models/runner.glb` replaces the placeholder runner at build time.
 
 ## Art direction
 

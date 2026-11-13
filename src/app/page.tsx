@@ -1,27 +1,32 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import Link from "next/link";
 import { LIBRARY_ROUTES } from "@/lib/routes";
+import { RUNNER_MODEL_PATH } from "@/run/config";
+import { RunExperience } from "@/run/RunExperience";
 
-// PLACEHOLDER: the run (Step 3) replaces this page. Until then it is the plain index.
 export default function Home() {
+  // Checked at build time: drop the file in /public/models and rebuild.
+  const hasRunnerModel = existsSync(path.join(process.cwd(), "public", RUNNER_MODEL_PATH));
+
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 py-24">
-      <p className="font-mono text-xs uppercase tracking-widest text-accent">The Long Run</p>
-      <h1 className="mt-3 text-3xl font-medium tracking-tight">Caleb the Curious</h1>
-      <p className="mt-3 text-sm text-muted">
-        Developer, ultra trail runner, storyteller. One continuous run through four decades.
-      </p>
-      <nav aria-label="Library" className="mt-12">
-        <ul className="border-t border-line">
+    <main className="relative flex-1">
+      <RunExperience hasRunnerModel={hasRunnerModel} />
+      {/* PLACEHOLDER: minimal overlay. Stage cards and "Skip the run" arrive in Step 4. */}
+      <header className="pointer-events-none fixed inset-x-0 top-0 z-10 flex flex-wrap items-baseline gap-x-5 gap-y-2 px-6 py-5 text-sm">
+        <p className="mr-auto font-mono text-xs uppercase tracking-widest text-accent">The Long Run</p>
+        <nav aria-label="Library" className="pointer-events-auto flex flex-wrap gap-x-5 gap-y-2">
           {LIBRARY_ROUTES.map((route) => (
-            <li key={route.href} className="border-b border-line">
-              <Link href={route.href} className="group grid gap-x-4 py-3 text-sm sm:grid-cols-[6.5rem_1fr]">
-                <span className="group-hover:text-accent">{route.label}</span>
-                <span className="text-muted">{route.line}</span>
-              </Link>
-            </li>
+            <Link key={route.href} href={route.href} className="text-muted hover:text-ink">
+              {route.label}
+            </Link>
           ))}
-        </ul>
-      </nav>
+        </nav>
+      </header>
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-10 px-6 py-6">
+        <h1 className="text-xl font-medium tracking-tight">Caleb the Curious</h1>
+        <p className="mt-1 text-sm text-muted">Scroll to run.</p>
+      </div>
     </main>
   );
 }
