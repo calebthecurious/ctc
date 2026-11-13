@@ -41,8 +41,3 @@ export function getPublicById(id: string): ContentItem | undefined {
 export function getPublicLinks(item: ContentItem): ContentItem[] {
   return item.links.flatMap((id) => publicById.get(id) ?? []);
 }
-
-/** The part of an id after `<type>/`, for use in URLs. */
-export function slugOf(item: ContentItem): string {
-  return item.id.slice(item.type.length + 1);
-}

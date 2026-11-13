@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Caleb the Curious",
+  title: { default: "Caleb the Curious", template: "%s · Caleb the Curious" },
   description: "Developer, ultra trail runner, storyteller. One continuous run through four decades.",
 };
 
